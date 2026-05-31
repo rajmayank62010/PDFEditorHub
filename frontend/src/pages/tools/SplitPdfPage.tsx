@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import ToolPageLayout from '@/components/tools/ToolPageLayout'
 import FileDropzone from '@/components/common/FileDropzone'
 import ProcessingModal from '@/components/common/ProcessingModal'
+import PdfViewer from '@/components/common/PdfViewer'
 import SEOHead from '@/components/seo/SEOHead'
 import { faqSchema, toolSchema, breadcrumbSchema } from '@/components/seo/schemas'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -23,15 +24,15 @@ interface SplitForm {
 const faqs = [
   {
     question: 'How do I split a PDF?',
-    answer: 'Upload your PDF, choose a split mode (by range, all pages, or extract specific pages), configure the options, and click Split PDF.',
+    answer: 'Upload your PDF, it will display on screen so you can see the pages. Choose a split mode, configure options, and click Split PDF.',
   },
   {
     question: 'What does "Split by page range" mean?',
-    answer: 'You can specify page ranges like "1-3, 5, 7-9" to extract those specific pages into a new PDF document.',
+    answer: 'Specify page ranges like "1-3, 5, 7-9" to extract those specific pages into a new PDF.',
   },
   {
-    question: 'Can I extract individual pages from a PDF?',
-    answer: 'Yes, use the "Extract Pages" mode and specify which page numbers you want to extract.',
+    question: 'Can I extract individual pages?',
+    answer: 'Yes, use "Extract Pages" mode and specify which page numbers you want.',
   },
 ]
 
@@ -39,6 +40,7 @@ export default function SplitPdfPage() {
   const [splitMode, setSplitMode] = useState<SplitMode>('byRange')
   const [result, setResult] = useState<ProcessResponse | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [totalPages, setTotalPages] = useState(0)
   const { download, isDownloading } = useDownload()
   const { register, handleSubmit } = useForm<SplitForm>()
 
@@ -86,14 +88,14 @@ export default function SplitPdfPage() {
       />
       <ToolPageLayout
         title="Split PDF"
-        description="Split your PDF into multiple documents or extract specific pages."
+        description="Preview your PDF, then split it by page ranges or extract specific pages."
         icon={<Scissors className="w-7 h-7 text-orange-600" />}
         iconBg="bg-orange-50"
         faqs={faqs}
         breadcrumb={[{ label: 'Split PDF' }]}
       >
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+        {readyFiles.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <FileDropzone
               onFilesAdded={addFiles}
               files={files}
@@ -101,18 +103,37 @@ export default function SplitPdfPage() {
               multiple={false}
               maxFiles={1}
               label="Drop a PDF file here or click to browse"
-              sublabel="Upload one PDF to split — up to 50MB"
+              sublabel="Upload one PDF to split — up to 50 MB"
             />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* PDF Preview */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700 truncate">{files[0]?.name}</span>
+                {totalPages > 0 && (
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
+                    {totalPages} pages
+                  </span>
+                )}
+              </div>
+              <PdfViewer
+                file={files[0]?.file ?? null}
+                onTotalPages={setTotalPages}
+                showControls={true}
+              />
+            </div>
 
-            {readyFiles.length > 0 && (
-              <>
-                {/* Split Mode */}
+            {/* Split Options */}
+            <form onSubmit={handleSubmit(onSubmit)}>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-3">Split Mode</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-2">
                     {([
                       { value: 'byRange', label: 'By Page Range', desc: 'e.g. 1-3, 5, 7-9' },
-                      { value: 'allPages', label: 'All Pages', desc: 'One PDF per page' },
+                      { value: 'allPages', label: 'All Pages', desc: 'One PDF per page (ZIP)' },
                       { value: 'extractPages', label: 'Extract Pages', desc: 'Pick specific pages' },
                     ] as const).map(mode => (
                       <button
@@ -120,68 +141,61 @@ export default function SplitPdfPage() {
                         type="button"
                         onClick={() => setSplitMode(mode.value)}
                         className={clsx(
-                          'p-4 rounded-xl border-2 text-left transition-all',
+                          'w-full p-3 rounded-xl border-2 text-left transition-all',
                           splitMode === mode.value
-                            ? 'border-primary-500 bg-primary-50'
+                            ? 'border-orange-500 bg-orange-50'
                             : 'border-gray-200 hover:border-gray-300'
                         )}
                       >
-                        <p className="font-medium text-gray-900 text-sm">{mode.label}</p>
+                        <p className={clsx('font-medium text-sm', splitMode === mode.value ? 'text-orange-700' : 'text-gray-900')}>
+                          {mode.label}
+                        </p>
                         <p className="text-xs text-gray-500 mt-0.5">{mode.desc}</p>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Page Range Input */}
                 {splitMode === 'byRange' && (
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Page Ranges
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Page Ranges</label>
                     <input
                       {...register('pageRanges', { required: true })}
                       type="text"
                       placeholder="e.g. 1-3, 5, 7-9"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Use commas to separate ranges. Example: 1-3, 5, 7-9
+                    <p className="text-xs text-gray-400 mt-1">
+                      {totalPages > 0 ? `This PDF has ${totalPages} pages.` : ''} Use commas to separate ranges.
                     </p>
                   </div>
                 )}
 
                 {splitMode === 'extractPages' && (
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Page Numbers
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Page Numbers</label>
                     <input
                       {...register('pages', { required: true })}
                       type="text"
-                      placeholder="e.g. 1, 3, 5, 7"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="e.g. 1, 3, 5"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Enter page numbers separated by commas.
-                    </p>
+                    <p className="text-xs text-gray-400 mt-1">Enter page numbers separated by commas.</p>
                   </div>
                 )}
 
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={isUploading || splitMutation.isPending}
-                    className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    <Scissors className="w-4 h-4" />
-                    Split PDF
-                  </button>
-                </div>
-              </>
-            )}
+                <button
+                  type="submit"
+                  disabled={isUploading || splitMutation.isPending}
+                  className="w-full py-3 bg-orange-600 text-white font-semibold rounded-xl hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Scissors className="w-4 h-4" />
+                  Split PDF
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        )}
       </ToolPageLayout>
 
       <ProcessingModal
