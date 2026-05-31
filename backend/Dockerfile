@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS builder
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS builder
 WORKDIR /src
 
 COPY PDFEditorHub.sln .
@@ -14,10 +14,9 @@ COPY . .
 RUN dotnet publish PDFEditorHub.API/PDFEditorHub.API.csproj -c Release -o /app/publish
 
 # Stage 2: Runtime
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS production
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS production
 WORKDIR /app
 
-# Install fonts for PDF rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     fonts-liberation \
@@ -25,7 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /app/publish .
 
-# Non-root user for security
 RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app
 USER appuser
 

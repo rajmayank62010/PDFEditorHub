@@ -27,17 +27,15 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "PDFEditorHub API",
         Version = "v1",
-        Description = "Privacy-first PDF processing API. Files are processed in memory and never permanently stored.",
+        Description = "Privacy-first PDF processing API. Files processed in memory, never stored permanently.",
         Contact = new OpenApiContact { Name = "PDFEditorHub", Email = "api@pdfeditorhub.com" }
     });
 });
 
-// ─── Memory Cache (single registration with size limit) ───────────────────────
-// IMPORTANT: Only one AddMemoryCache call. SizeLimit is required for TempFileStore.SetSize() to work.
-builder.Services.AddMemoryCache(options =>
-{
-    options.SizeLimit = 500 * 1024 * 1024; // 500 MB
-});
+// ─── Memory Cache (plain — used by rate limiter only) ─────────────────────────
+// TempFileStore creates its OWN private MemoryCache with SizeLimit.
+// This plain cache is for AspNetCoreRateLimit only.
+builder.Services.AddMemoryCache();
 
 // ─── FluentValidation ─────────────────────────────────────────────────────────
 builder.Services.AddFluentValidationAutoValidation();
@@ -66,8 +64,10 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ─── Domain / Infrastructure Services ────────────────────────────────────────
-builder.Services.AddScoped<ITempFileStore, TempFileStore>();
+// ─── Infrastructure Services ──────────────────────────────────────────────────
+// TempFileStore is Singleton because it owns its own MemoryCache
+builder.Services.AddSingleton<ITempFileStore, TempFileStore>();
+
 builder.Services.AddScoped<IPdfMergeService, PdfMergeService>();
 builder.Services.AddScoped<IPdfSplitService, PdfSplitService>();
 builder.Services.AddScoped<IPdfCompressService, PdfCompressService>();
@@ -97,7 +97,6 @@ builder.WebHost.ConfigureKestrel(options =>
 // ─── Logging ──────────────────────────────────────────────────────────────────
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-builder.Logging.AddDebug();
 
 var app = builder.Build();
 
@@ -113,7 +112,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Global exception handler (must be first)
+// Global exception handler — must be first
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -121,7 +120,7 @@ app.UseExceptionHandler(errorApp =>
         context.Response.StatusCode = 500;
         context.Response.ContentType = "application/json";
         var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
-        if (error != null)
+        if (error is not null)
         {
             var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
             logger.LogError(error.Error, "Unhandled exception");
@@ -139,7 +138,7 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
-// Validation exception middleware (converts FluentValidation/domain exceptions to 400)
+// Validation + domain exception → 400
 app.UseValidationExceptionHandling();
 
 // Rate limiting
